@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Мій віджет</title>
-    <!-- Підключаємо наші стилі -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -18,7 +17,21 @@
         <textarea id="output" placeholder="Тут з'являться рядки..."></textarea>
     </div>
 
-    <!-- Підключаємо JavaScript-скрипт в самому кінці -->
-    <script src="script.js"></script>
+    <!-- Весь JavaScript прямо тут, усередині HTML -->
+    <script>
+        document.getElementById('fileInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const content = e.target.result;
+                const lines = content.split('\n');
+                document.getElementById('output').value = lines.slice(0, 5).join('\n');
+            };
+            reader.readAsText(file);
+        });
+    </script>
+
 </body>
 </html>

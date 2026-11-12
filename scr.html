@@ -15,7 +15,7 @@
 <body>
 
     <div class="widget">
-        <div class="title">Фільтрація документів (PDF, Excel, Word)</div>
+        <div class="title">Фільтрація прайс-листа (PDF, Excel, Word)</div>
         
         <div class="top-panel">
             <input type="file" id="fileInput" accept=".pdf,.xlsx,.xls,.docx">
@@ -27,16 +27,16 @@
         </div>
 
         <!-- Полоска-фільтр -->
-        <input type="text" id="filterInput" class="filter-input" placeholder="Введіть пошуковий запит..." disabled>
+        <input type="text" id="filterInput" class="filter-input" placeholder="Введіть запит (наприклад: штукатурка, стіни)..." disabled>
 
-        <!-- Структуроване табло результатів (виведемо великим шрифтом у вигляді акуратних рядків) -->
+        <!-- Структуроване табло результатів (виведемо таблицею) -->
         <div id="output" class="output-box">
-            <div class="placeholder-text">Текст з'явиться тут після введення фільтра...</div>
+            <div class="placeholder-text">Завантажте документ і введіть запит для пошуку...</div>
         </div>
     </div>
 
     <script>
-        let fileLines = [];
+        let fileItems = []; // Масив об'єктів (розділи, роботи, ціни)
 
         document.getElementById('fileInput').addEventListener('change', async function(event) {
             const file = event.target.files[0];
@@ -44,7 +44,7 @@
 
             const extension = file.name.split('.').pop().toLowerCase();
             const outputBox = document.getElementById('output');
-            outputBox.innerHTML = '<div class="placeholder-text">Завантаження та обробка документа...</div>';
+            outputBox.innerHTML = '<div class="placeholder-text">Обробка та структурування документа...</div>';
 
             try {
                 let fullText = "";
@@ -61,8 +61,8 @@
                     return;
                 }
 
-                // Розбиваємо текст по рядках і чистимо від порожніх місць
-                fileLines = fullText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+                // Перетворюємо сирий текст на структуровані елементи (розділи та рядки цін)
+                fileItems = parseStructuredText(fullText);
 
                 document.getElementById('fileName').textContent = file.name;
                 document.getElementById('fileContainer').style.display = 'flex';
@@ -72,7 +72,7 @@
                 filterInput.disabled = false;
                 filterInput.focus();
 
-                outputBox.innerHTML = `<div class="placeholder-text">Документ завантажено (${fileLines.length} рядків). Введіть запит вище.</div>`;
+                outputBox.innerHTML = `<div class="placeholder-text">Документ готовий. Знайдено позицій: ${fileItems.length}. Введіть запит вище.</div>`;
 
             } catch (error) {
                 console.error(error);
@@ -87,8 +87,8 @@
             for (let i = 1; i <= pdf.numPages; i++) {
                 const page = await pdf.getPage(i);
                 const textContent = await page.getTextContent();
-                // Кожну текстову частину збираємо і ставимо переносом рядка, щоб не було каші
-                const pageText = textContent.items.map(item => item.str).join(' ');
+                // Зберігаємо вертикальне положення або просто гарно збираємо рядки
+                const pageText = textContent.items.map(item => item.str).join('   ');
                 text += pageText + "\n";
             }
             return text;
@@ -111,10 +111,33 @@
             return result.value;
         }
 
+        // Функція інтелектуального розбору прайсу на рядки/заголовки
+        function parseStructuredText(text) {
+            const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+            let items = [];
+            let currentCategory = "";
+
+            // Регулярки для виділення цін та одиниць виміру у кінці рядка (напр: "м2 400,00" або "пог.м 500")
+            // Шукаємо цифри з комами в кінці рядка
+            for (let line of rawLines) {
+                // Перевіряємо, чи це заголовок розділу (наприклад, повністю великими літерами типу "ШТУКАТУРНІ РОБОТИ")
+                if (line === line.toUpperCase() && line.length > 3 && !/\d/.test(line)) {
+                    currentCategory = line;
+                    continue;
+                }
+
+                items.push({
+                    category: currentCategory,
+                    rawText: line
+                });
+            }
+            return items;
+        }
+
         document.getElementById('removeFile').addEventListener('click', resetWidget);
 
         function resetWidget() {
-            fileLines = [];
+            fileItems = [];
             document.getElementById('fileInput').value = '';
             document.getElementById('fileContainer').style.display = 'none';
             document.getElementById('fileInput').style.display = 'inline-block';
@@ -123,25 +146,59 @@
             filterInput.value = '';
             filterInput.disabled = true;
 
-            document.getElementById('output').innerHTML = '<div class="placeholder-text">Текст з\'явиться тут після введення фільтра...</div>';
+            document.getElementById('output').innerHTML = '<div class="placeholder-text">Завантажте документ і введіть запит для пошуку...</div>';
         }
 
-        // Розумний фільтр без зайвих символів
+        // Пошук і форматування під красиві табличні колонки
         document.getElementById('filterInput').addEventListener('input', function(e) {
             const query = e.target.value.trim().toLowerCase();
             const outputBox = document.getElementById('output');
 
-            if (!query || fileLines.length === 0) {
-                outputBox.innerHTML = '<div class="placeholder-text">Текст з\'явиться тут після введення фільтра...</div>';
+            if (!query || fileItems.length === 0) {
+                outputBox.innerHTML = '<div class="placeholder-text">Завантажте документ і введіть запит для пошуку...</div>';
                 return;
             }
 
-            // Шукаємо рядки, які містять введений запит (регістр не має значення)
-            const matchedLines = fileLines.filter(line => line.toLowerCase().includes(query));
+            // Фільтруємо позиції за запитом
+            const matched = fileItems.filter(item => item.rawText.toLowerCase().includes(query));
 
-            if (matchedLines.length > 0) {
-                // Виводимо кожну знайдену позицію великим структурованим блоком
-                outputBox.innerHTML = matchedLines.map(line => `<div class="result-row">${line}</div>`).join('');
+            if (matched.length > 0) {
+                let htmlContent = '';
+                let lastCat = '';
+
+                matched.forEach(item => {
+                    // Якщо з'явився новий розділ — малюємо його по центру як заголовок
+                    if (item.category && item.category !== lastCat) {
+                        lastCat = item.category;
+                        htmlContent += `<div class="section-header">${lastCat}</div>`;
+                    }
+
+                    // Розбиваємо рядок на частини (назва, одиниця виміру, ціна), якщо вони є
+                    const parts = item.rawText.split(/\s{2,}|\t+|(?=[м²%]|пог\.м|шт|тука|кв\.м)\b/);
+                    
+                    let namePart = item.rawText;
+                    let unitPricePart = "";
+
+                    // Спроба акуратно відокремити назву від ціни в кінці рядка
+                    const priceMatch = item.rawText.match(/(?:м²|м2|пог\.м|шт|%|\bм\b)\s*([\d\s,]+)$/i);
+                    if (priceMatch) {
+                        const idx = item.rawText.lastIndexOf(priceMatch[0]);
+                        namePart = item.rawText.substring(0, idx).trim();
+                        unitPricePart = priceMatch[0];
+                    }
+
+                    if (!namePart) namePart = item.rawText;
+
+                    // Формуємо гарний рядок у вигляді колонок
+                    htmlContent += `
+                        <div class="table-row">
+                            <div class="row-name">${namePart}</div>
+                            <div class="row-price">${unitPricePart}</div>
+                        </div>
+                    `;
+                });
+
+                outputBox.innerHTML = htmlContent;
             } else {
                 outputBox.innerHTML = '<div class="placeholder-text" style="color: #ff5252;">Нічого не знайдено за цим запитом...</div>';
             }

@@ -3,65 +3,123 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Віджет фільтрації</title>
-    <!-- Підключаємо твої стилі з окремого файлу -->
+    <title>Розумний фільтр документів</title>
     <link rel="stylesheet" href="style.css">
+    
+    <!-- Підключаємо бібліотеки для зчитування PDF, Excel та Word прямо в браузері -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 </head>
 <body>
 
     <div class="widget">
-        <div class="title">Віджет фільтрації текстових даних</div>
+        <div class="title">Фільтрація документів (PDF, Excel, Word)</div>
         
         <div class="top-panel">
-            <input type="file" id="fileInput" accept=".txt,.log,.csv,.json,.html,.js,.md,text/*">
+            <!-- Приймаємо тільки 3 формати -->
+            <input type="file" id="fileInput" accept=".pdf,.xlsx,.xls,.docx">
             
-            <!-- Блок відображення файлу та хрестика для видалення -->
+            <!-- Блок інфо про файл та хрестик видалення -->
             <div id="fileContainer" style="display: none;" class="file-info">
                 <span id="fileName"></span>
                 <button class="remove-btn" id="removeFile" title="Видалити файл">✕</button>
             </div>
         </div>
 
-        <!-- Довга тонка полоска-фільтр -->
-        <input type="text" id="filterInput" class="filter-input" placeholder="Введіть текст для фільтрації..." disabled>
+        <!-- Довга полоска-фільтр (розумний пошук) -->
+        <input type="text" id="filterInput" class="filter-input" placeholder="Введіть запит (наприклад: ПЛ)..." disabled>
 
-        <!-- Велике центральне табло для результатів фільтрації -->
-        <textarea id="output" class="output-box" placeholder="Текст з'явиться тут після того, як ви введете запит у фільтрі..." readonly></textarea>
+        <!-- Велике центральне табло результатів -->
+        <textarea id="output" class="output-box" placeholder="Текст з'явиться тут після введення фільтра..." readonly></textarea>
     </div>
 
-    <!-- Весь JavaScript прямо тут, усередині HTML-файлу -->
     <script>
-        let fileLines = []; // Зберігаємо всі рядки завантаженого файлу
+        let fileLines = []; // Масив усіх витягнутих рядків із документа
 
-        // 1. Завантаження файлу (будь-якого текстового)
-        document.getElementById('fileInput').addEventListener('change', function(event) {
+        // Обробка завантаження файлу
+        document.getElementById('fileInput').addEventListener('change', async function(event) {
             const file = event.target.files[0];
             if (!file) return;
 
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const content = e.target.result;
-                fileLines = content.split(/\r?\n/); // Розбиваємо по рядках
+            const extension = file.name.split('.').pop().toLowerCase();
+            const outputBox = document.getElementById('output');
+            outputBox.value = "Завантаження та обробка документа...";
 
-                // Показуємо назву і кнопку з хрестиком, ховаємо інпут вибору
+            try {
+                let fullText = "";
+
+                if (extension === 'pdf') {
+                    fullText = await readPDF(file);
+                } else if (extension === 'xlsx' || extension === 'xls') {
+                    fullText = await readExcel(file);
+                } else if (extension === 'docx') {
+                    fullText = await readWord(file);
+                } else {
+                    alert('Підтримуються тільки формати PDF, Excel (.xlsx/.xls) та Word (.docx)!');
+                    resetWidget();
+                    return;
+                }
+
+                // Розбиваємо весь текст на окремі рядки для фільтрації
+                fileLines = fullText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+
+                // Інтерфейс успішного завантаження
                 document.getElementById('fileName').textContent = file.name;
                 document.getElementById('fileContainer').style.display = 'flex';
                 document.getElementById('fileInput').style.display = 'none';
-                
-                // Активуємо фільтр
+
                 const filterInput = document.getElementById('filterInput');
                 filterInput.disabled = false;
                 filterInput.focus();
 
-                document.getElementById('output').value = ""; // Очищуємо табло
-            };
-            reader.readAsText(file);
+                outputBox.value = `Документ успішно завантажено (${fileLines.length} рядків). Введіть фільтр вище.`;
+
+            } catch (error) {
+                console.error(error);
+                outputBox.value = "Помилка при читанні файлу!";
+            }
         });
 
-        // 2. Кнопка видалення файлу (хрестик)
-        document.getElementById('removeFile').addEventListener('click', function() {
+        // 1. Читання PDF
+        async function readPDF(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let text = "";
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                text += textContent.items.map(item => item.str).join(' ') + "\n";
+            }
+            return text;
+        }
+
+        // 2. Читання Excel (переводимо всі листи в табличний текст по рядках)
+        async function readExcel(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+            let text = "";
+            workbook.SheetNames.forEach(sheetName => {
+                const sheet = workbook.Sheets[sheetName];
+                text += XLSX.utils.sheet_to_csv(sheet) + "\n";
+            });
+            return text;
+        }
+
+        // 3. Читання Word (.docx)
+        async function readWord(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+            return result.value;
+        }
+
+        // Кнопка видалення (хрестик)
+        document.getElementById('removeFile').addEventListener('click', resetWidget);
+
+        function resetWidget() {
             fileLines = [];
-            document.getElementById('fileInput').value = ''; // Скидаємо інпут
+            document.getElementById('fileInput').value = '';
             document.getElementById('fileContainer').style.display = 'none';
             document.getElementById('fileInput').style.display = 'inline-block';
             
@@ -70,19 +128,19 @@
             filterInput.disabled = true;
 
             document.getElementById('output').value = '';
-        });
+        }
 
-        // 3. Фільтрація текстів у реальному часі на великому табло
+        // Жорсткий розумний фільтр (підлаштовується під будь-які символи/частину слова)
         document.getElementById('filterInput').addEventListener('input', function(e) {
             const query = e.target.value.trim().toLowerCase();
             const outputBox = document.getElementById('output');
 
             if (!query || fileLines.length === 0) {
-                outputBox.value = ''; // Якщо фільтр пустий — табло пусте
+                outputBox.value = '';
                 return;
             }
 
-            // Фільтруємо рядки, які містять введений текст
+            // Шукає співпадіння вкладеності тексту (навіть по обрубку типу "пл")
             const matchedLines = fileLines.filter(line => line.toLowerCase().includes(query));
 
             if (matchedLines.length > 0) {

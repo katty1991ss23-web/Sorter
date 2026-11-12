@@ -10,8 +10,8 @@ body {
 }
 
 .widget {
-    width: 700px;
-    height: 500px;
+    width: 750px;
+    height: 520px;
     background: #2d2d2d;
     border: 1px solid #444;
     border-radius: 8px;
@@ -43,7 +43,7 @@ input[type="file"] {
     color: #fff;
 }
 
-/* Інформація про файл + хрестик */
+/* Блок інфо про файл та хрестик */
 .file-info {
     display: flex;
     align-items: center;
@@ -87,7 +87,7 @@ input[type="file"] {
     border-color: #81C784;
 }
 
-/* Велике центральне табло для результатів фільтрації */
+/* Велике центральне табло результатів */
 .output-box {
     width: 100%;
     flex-grow: 1;

@@ -6,7 +6,7 @@
     <title>Розумний фільтр документів</title>
     <link rel="stylesheet" href="style.css">
     
-    <!-- Підключаємо бібліотеки для зчитування PDF, Excel та Word прямо в браузері -->
+    <!-- Бібліотеки для читання PDF, Excel, Word -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -18,34 +18,33 @@
         <div class="title">Фільтрація документів (PDF, Excel, Word)</div>
         
         <div class="top-panel">
-            <!-- Приймаємо тільки 3 формати -->
             <input type="file" id="fileInput" accept=".pdf,.xlsx,.xls,.docx">
             
-            <!-- Блок інфо про файл та хрестик видалення -->
             <div id="fileContainer" style="display: none;" class="file-info">
                 <span id="fileName"></span>
                 <button class="remove-btn" id="removeFile" title="Видалити файл">✕</button>
             </div>
         </div>
 
-        <!-- Довга полоска-фільтр (розумний пошук) -->
-        <input type="text" id="filterInput" class="filter-input" placeholder="Введіть запит (наприклад: ПЛ)..." disabled>
+        <!-- Полоска-фільтр -->
+        <input type="text" id="filterInput" class="filter-input" placeholder="Введіть пошуковий запит..." disabled>
 
-        <!-- Велике центральне табло результатів -->
-        <textarea id="output" class="output-box" placeholder="Текст з'явиться тут після введення фільтра..." readonly></textarea>
+        <!-- Структуроване табло результатів (виведемо великим шрифтом у вигляді акуратних рядків) -->
+        <div id="output" class="output-box">
+            <div class="placeholder-text">Текст з'явиться тут після введення фільтра...</div>
+        </div>
     </div>
 
     <script>
-        let fileLines = []; // Масив усіх витягнутих рядків із документа
+        let fileLines = [];
 
-        // Обробка завантаження файлу
         document.getElementById('fileInput').addEventListener('change', async function(event) {
             const file = event.target.files[0];
             if (!file) return;
 
             const extension = file.name.split('.').pop().toLowerCase();
             const outputBox = document.getElementById('output');
-            outputBox.value = "Завантаження та обробка документа...";
+            outputBox.innerHTML = '<div class="placeholder-text">Завантаження та обробка документа...</div>';
 
             try {
                 let fullText = "";
@@ -57,15 +56,14 @@
                 } else if (extension === 'docx') {
                     fullText = await readWord(file);
                 } else {
-                    alert('Підтримуються тільки формати PDF, Excel (.xlsx/.xls) та Word (.docx)!');
+                    alert('Підтримуються тільки PDF, Excel та Word!');
                     resetWidget();
                     return;
                 }
 
-                // Розбиваємо весь текст на окремі рядки для фільтрації
+                // Розбиваємо текст по рядках і чистимо від порожніх місць
                 fileLines = fullText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
 
-                // Інтерфейс успішного завантаження
                 document.getElementById('fileName').textContent = file.name;
                 document.getElementById('fileContainer').style.display = 'flex';
                 document.getElementById('fileInput').style.display = 'none';
@@ -74,15 +72,14 @@
                 filterInput.disabled = false;
                 filterInput.focus();
 
-                outputBox.value = `Документ успішно завантажено (${fileLines.length} рядків). Введіть фільтр вище.`;
+                outputBox.innerHTML = `<div class="placeholder-text">Документ завантажено (${fileLines.length} рядків). Введіть запит вище.</div>`;
 
             } catch (error) {
                 console.error(error);
-                outputBox.value = "Помилка при читанні файлу!";
+                outputBox.innerHTML = '<div class="placeholder-text" style="color: #ff5252;">Помилка при читанні файлу!</div>';
             }
         });
 
-        // 1. Читання PDF
         async function readPDF(file) {
             const arrayBuffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -90,12 +87,13 @@
             for (let i = 1; i <= pdf.numPages; i++) {
                 const page = await pdf.getPage(i);
                 const textContent = await page.getTextContent();
-                text += textContent.items.map(item => item.str).join(' ') + "\n";
+                // Кожну текстову частину збираємо і ставимо переносом рядка, щоб не було каші
+                const pageText = textContent.items.map(item => item.str).join(' ');
+                text += pageText + "\n";
             }
             return text;
         }
 
-        // 2. Читання Excel (переводимо всі листи в табличний текст по рядках)
         async function readExcel(file) {
             const arrayBuffer = await file.arrayBuffer();
             const workbook = XLSX.read(arrayBuffer, { type: 'array' });
@@ -107,14 +105,12 @@
             return text;
         }
 
-        // 3. Читання Word (.docx)
         async function readWord(file) {
             const arrayBuffer = await file.arrayBuffer();
             const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
             return result.value;
         }
 
-        // Кнопка видалення (хрестик)
         document.getElementById('removeFile').addEventListener('click', resetWidget);
 
         function resetWidget() {
@@ -127,26 +123,27 @@
             filterInput.value = '';
             filterInput.disabled = true;
 
-            document.getElementById('output').value = '';
+            document.getElementById('output').innerHTML = '<div class="placeholder-text">Текст з\'явиться тут після введення фільтра...</div>';
         }
 
-        // Жорсткий розумний фільтр (підлаштовується під будь-які символи/частину слова)
+        // Розумний фільтр без зайвих символів
         document.getElementById('filterInput').addEventListener('input', function(e) {
             const query = e.target.value.trim().toLowerCase();
             const outputBox = document.getElementById('output');
 
             if (!query || fileLines.length === 0) {
-                outputBox.value = '';
+                outputBox.innerHTML = '<div class="placeholder-text">Текст з\'явиться тут після введення фільтра...</div>';
                 return;
             }
 
-            // Шукає співпадіння вкладеності тексту (навіть по обрубку типу "пл")
+            // Шукаємо рядки, які містять введений запит (регістр не має значення)
             const matchedLines = fileLines.filter(line => line.toLowerCase().includes(query));
 
             if (matchedLines.length > 0) {
-                outputBox.value = matchedLines.join('\n');
+                // Виводимо кожну знайдену позицію великим структурованим блоком
+                outputBox.innerHTML = matchedLines.map(line => `<div class="result-row">${line}</div>`).join('');
             } else {
-                outputBox.value = 'Нічого не знайдено за цим запитом...';
+                outputBox.innerHTML = '<div class="placeholder-text" style="color: #ff5252;">Нічого не знайдено за цим запитом...</div>';
             }
         });
     </script>

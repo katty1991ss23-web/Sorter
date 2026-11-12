@@ -8,13 +8,8 @@
 
     <link rel="stylesheet" href="style.css">
 
-    <!-- PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-
-    <!-- Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-
-    <!-- Word -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 </head>
 
@@ -26,11 +21,7 @@
 
     <div class="top-panel">
 
-        <input
-            type="file"
-            id="fileInput"
-            accept=".pdf,.xlsx,.xls,.docx"
-        >
+        <input type="file" id="fileInput" accept=".pdf,.xlsx,.xls,.docx">
 
         <div id="fileContainer" class="file-info" style="display:none;">
             <span id="fileName"></span>
@@ -61,7 +52,6 @@
 pdfjsLib.GlobalWorkerOptions.workerSrc =
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-
 let documentBlocks = [];
 
 
@@ -76,7 +66,6 @@ document.getElementById("fileInput").addEventListener("change", async function(e
     if (!file) return;
 
     const extension = file.name.split(".").pop().toLowerCase();
-
     const output = document.getElementById("output");
 
     output.innerHTML = `
@@ -90,21 +79,16 @@ document.getElementById("fileInput").addEventListener("change", async function(e
         let rawBlocks = [];
 
         if (extension === "pdf") {
-
             rawBlocks = await readPDF(file);
-
-        } else if (extension === "xlsx" || extension === "xls") {
-
+        }
+        else if (extension === "xlsx" || extension === "xls") {
             rawBlocks = await readExcel(file);
-
-        } else if (extension === "docx") {
-
+        }
+        else if (extension === "docx") {
             rawBlocks = await readWord(file);
-
-        } else {
-
+        }
+        else {
             throw new Error("Непідтримуваний формат файлу");
-
         }
 
         documentBlocks = structureDocument(rawBlocks);
@@ -117,17 +101,14 @@ document.getElementById("fileInput").addEventListener("change", async function(e
         const filter = document.getElementById("filterInput");
 
         filter.disabled = false;
-        filter.focus();
+        filter.value = "";
 
-        output.innerHTML = `
-            <div class="placeholder-text">
-                Документ завантажено.<br><br>
-                Структурних блоків: ${documentBlocks.length}.<br>
-                Введіть запит для пошуку.
-            </div>
-        `;
+        // ОДРАЗУ ПОКАЗУЄМО ВЕСЬ ДОКУМЕНТ
 
-    } catch (error) {
+        renderFullDocument();
+
+    }
+    catch (error) {
 
         console.error(error);
 
@@ -159,7 +140,6 @@ async function readPDF(file) {
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
 
         const page = await pdf.getPage(pageNumber);
-
         const content = await page.getTextContent();
 
         const items = content.items
@@ -176,8 +156,6 @@ async function readPDF(file) {
                 };
 
             });
-
-        // Групуємо текст за вертикальними координатами
 
         const lines = [];
 
@@ -351,8 +329,6 @@ function structureDocument(rawBlocks) {
 
             if (cells.length === 0) return;
 
-            // Excel: рядок таблиці залишається таблицею
-
             result.push({
                 type: "row",
                 category: currentCategory,
@@ -369,8 +345,6 @@ function structureDocument(rawBlocks) {
 
         if (!line) return;
 
-        // Розпізнавання заголовків
-
         if (isHeading(line)) {
 
             currentCategory = line;
@@ -383,8 +357,6 @@ function structureDocument(rawBlocks) {
             return;
 
         }
-
-        // Розпізнавання рядків прайсу
 
         const price = parsePriceLine(line);
 
@@ -401,8 +373,6 @@ function structureDocument(rawBlocks) {
             return;
 
         }
-
-        // Усе інше залишається звичайним текстом
 
         result.push({
             type: "text",
@@ -427,8 +397,6 @@ function isHeading(line) {
         return false;
     }
 
-    // Рядки без цифр, написані великими літерами
-
     const letters = line.replace(/[^А-ЯІЇЄҐA-Z]/g, "");
 
     if (
@@ -439,13 +407,9 @@ function isHeading(line) {
         return true;
     }
 
-    // Типові назви розділів
-
     if (/^(розділ|частина|глава|section|chapter)\s+[\dIVXА-Я]/i.test(line)) {
         return true;
     }
-
-    // Нумеровані заголовки на кшталт 1. Загальні роботи
 
     if (/^\d+(\.\d+)*\.?\s+[А-ЯІЇЄҐA-Z]/.test(line) && line.length < 100) {
         return true;
@@ -476,8 +440,6 @@ function parsePriceLine(line) {
 
     }
 
-    // Резервний варіант: назва + ціна
-
     const simpleMatch = line.match(
         /^(.+?)\s+([\d][\d\s]*(?:[.,]\d{1,2})?)\s*(грн\.?|₴)$/i
     );
@@ -498,6 +460,43 @@ function parsePriceLine(line) {
 
 
 /* =====================================================
+   ПОКАЗ УСЬОГО ДОКУМЕНТА
+===================================================== */
+
+function renderFullDocument() {
+
+    const output = document.getElementById("output");
+
+    if (documentBlocks.length === 0) {
+
+        output.innerHTML = `
+            <div class="placeholder-text">
+                Документ не містить доступного для читання тексту.
+            </div>
+        `;
+
+        return;
+
+    }
+
+    let html = `
+        <div class="result-count">
+            ПОВНИЙ ДОКУМЕНТ · Блоків: ${documentBlocks.length}
+        </div>
+    `;
+
+    documentBlocks.forEach(block => {
+
+        html += renderBlock(block, "");
+
+    });
+
+    output.innerHTML = html;
+
+}
+
+
+/* =====================================================
    ПОШУК
 ===================================================== */
 
@@ -507,21 +506,17 @@ document.getElementById("filterInput").addEventListener("input", function(event)
 
     const output = document.getElementById("output");
 
+    // Порожній пошук — повертаємо весь документ
+
     if (!query) {
 
-        output.innerHTML = `
-            <div class="placeholder-text">
-                Введіть запит для пошуку в документі...
-            </div>
-        `;
+        renderFullDocument();
 
         return;
 
     }
 
     const matchedIndexes = new Set();
-
-    // Знаходимо всі відповідні блоки
 
     documentBlocks.forEach((block, index) => {
 
@@ -547,7 +542,7 @@ document.getElementById("filterInput").addEventListener("input", function(event)
 
     }
 
-    // Додаємо заголовок розділу до знайденого фрагмента
+    // Підтягуємо заголовок відповідного розділу
 
     const indexesToShow = new Set();
 
@@ -573,15 +568,13 @@ document.getElementById("filterInput").addEventListener("input", function(event)
 
     let html = `
         <div class="result-count">
-            Знайдено відповідних блоків: ${matchedIndexes.size}
+            ЗНАЙДЕНО БЛОКІВ: ${matchedIndexes.size}
         </div>
     `;
 
     sortedIndexes.forEach(index => {
 
-        const block = documentBlocks[index];
-
-        html += renderBlock(block, query);
+        html += renderBlock(documentBlocks[index], query);
 
     });
 
@@ -717,7 +710,7 @@ function highlight(text, query) {
 
 
 /* =====================================================
-   ВИДАЛЕННЯ ФАЙЛУ ТА СКИДАННЯ
+   ВИДАЛЕННЯ ФАЙЛУ
 ===================================================== */
 
 document.getElementById("removeFile").addEventListener("click", resetWidget);

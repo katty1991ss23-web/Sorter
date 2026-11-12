@@ -3,22 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Мій віджет</title>
+    <title>Віджет фільтрації</title>
+    <!-- Підключаємо твої стилі з окремого файлу -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <div class="widget">
-        <div>
-            <div class="title">PDF Квадратик-Віджет</div>
-            <input type="file" id="fileInput" accept=".txt">
-        </div>
+        <div class="title">Віджет фільтрації текстових даних</div>
         
-        <textarea id="output" placeholder="Тут з'являться рядки..."></textarea>
+        <div class="top-panel">
+            <input type="file" id="fileInput" accept=".txt,.log,.csv,.json,.html,.js,.md,text/*">
+            
+            <!-- Блок відображення файлу та хрестика для видалення -->
+            <div id="fileContainer" style="display: none;" class="file-info">
+                <span id="fileName"></span>
+                <button class="remove-btn" id="removeFile" title="Видалити файл">✕</button>
+            </div>
+        </div>
+
+        <!-- Довга тонка полоска-фільтр -->
+        <input type="text" id="filterInput" class="filter-input" placeholder="Введіть текст для фільтрації..." disabled>
+
+        <!-- Велике центральне табло для результатів фільтрації -->
+        <textarea id="output" class="output-box" placeholder="Текст з'явиться тут після того, як ви введете запит у фільтрі..." readonly></textarea>
     </div>
 
-    <!-- Весь JavaScript прямо тут, усередині HTML -->
+    <!-- Весь JavaScript прямо тут, усередині HTML-файлу -->
     <script>
+        let fileLines = []; // Зберігаємо всі рядки завантаженого файлу
+
+        // 1. Завантаження файлу (будь-якого текстового)
         document.getElementById('fileInput').addEventListener('change', function(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -26,10 +41,55 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 const content = e.target.result;
-                const lines = content.split('\n');
-                document.getElementById('output').value = lines.slice(0, 5).join('\n');
+                fileLines = content.split(/\r?\n/); // Розбиваємо по рядках
+
+                // Показуємо назву і кнопку з хрестиком, ховаємо інпут вибору
+                document.getElementById('fileName').textContent = file.name;
+                document.getElementById('fileContainer').style.display = 'flex';
+                document.getElementById('fileInput').style.display = 'none';
+                
+                // Активуємо фільтр
+                const filterInput = document.getElementById('filterInput');
+                filterInput.disabled = false;
+                filterInput.focus();
+
+                document.getElementById('output').value = ""; // Очищуємо табло
             };
             reader.readAsText(file);
+        });
+
+        // 2. Кнопка видалення файлу (хрестик)
+        document.getElementById('removeFile').addEventListener('click', function() {
+            fileLines = [];
+            document.getElementById('fileInput').value = ''; // Скидаємо інпут
+            document.getElementById('fileContainer').style.display = 'none';
+            document.getElementById('fileInput').style.display = 'inline-block';
+            
+            const filterInput = document.getElementById('filterInput');
+            filterInput.value = '';
+            filterInput.disabled = true;
+
+            document.getElementById('output').value = '';
+        });
+
+        // 3. Фільтрація текстів у реальному часі на великому табло
+        document.getElementById('filterInput').addEventListener('input', function(e) {
+            const query = e.target.value.trim().toLowerCase();
+            const outputBox = document.getElementById('output');
+
+            if (!query || fileLines.length === 0) {
+                outputBox.value = ''; // Якщо фільтр пустий — табло пусте
+                return;
+            }
+
+            // Фільтруємо рядки, які містять введений текст
+            const matchedLines = fileLines.filter(line => line.toLowerCase().includes(query));
+
+            if (matchedLines.length > 0) {
+                outputBox.value = matchedLines.join('\n');
+            } else {
+                outputBox.value = 'Нічого не знайдено за цим запитом...';
+            }
         });
     </script>
 

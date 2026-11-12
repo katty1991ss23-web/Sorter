@@ -10,8 +10,8 @@ body {
 }
 
 .widget {
-    width: 900px;
-    height: 650px;
+    width: 950px;
+    height: 680px;
     background: #2d2d2d;
     border: 1px solid #444;
     border-radius: 8px;
@@ -37,13 +37,11 @@ body {
     width: 100%;
 }
 
-/* Кнопка вибору файлу */
 input[type="file"] {
     font-size: 13px;
     color: #fff;
 }
 
-/* Блок інфо про файл та хрестик */
 .file-info {
     display: flex;
     align-items: center;
@@ -70,7 +68,7 @@ input[type="file"] {
     color: #ff1744;
 }
 
-/* Полоска-фільтр */
+/* Чистий фільтр без зайвого тексту всередині */
 .filter-input {
     width: 100%;
     background: #1e1e1e;
@@ -87,7 +85,6 @@ input[type="file"] {
     border-color: #81C784;
 }
 
-/* Велике структуроване табло результатів */
 .output-box {
     width: 100%;
     flex-grow: 1;
@@ -100,25 +97,24 @@ input[type="file"] {
     overflow-y: auto;
 }
 
-/* Заголовок розділу по центру (як у документі на фото 2) */
+/* Заголовок розділу по центру, як у прайсі */
 .section-header {
     text-align: center;
     font-size: 16px;
     font-weight: bold;
     color: #81C784;
     background: #252525;
-    padding: 8px;
-    margin: 16px 0 10px 0;
+    padding: 10px;
+    margin: 18px 0 10px 0;
     border-radius: 4px;
     letter-spacing: 1px;
     text-transform: uppercase;
     border-bottom: 2px solid #4CAF50;
 }
 
-/* Рядок у вигляді колонок: зліва назва, справа ціна */
+/* Табличний рядок із розділенням на 3 чіткі колонки */
 .table-row {
     display: flex;
-    justify-content: space-between;
     align-items: center;
     background: #252525;
     padding: 10px 14px;
@@ -127,18 +123,33 @@ input[type="file"] {
     border-left: 3px solid #4CAF50;
 }
 
-.row-name {
+/* Колонка 1: Назва роботи (займає весь вільний простір зліва) */
+.col-name {
+    flex-grow: 1;
     font-size: 15px;
     color: #e0e0e0;
-    flex-grow: 1;
     padding-right: 15px;
 }
 
-.row-price {
+/* Колонка 2: Одиниця виміру (по центру) */
+.col-unit {
+    width: 90px;
+    text-align: center;
+    font-size: 14px;
+    color: #b0bec5;
+    background: #1e1e1e;
+    padding: 4px 6px;
+    border-radius: 4px;
+    margin-right: 12px;
+}
+
+/* Колонка 3: Ціна (праворуч) */
+.col-price {
+    width: 100px;
+    text-align: right;
     font-size: 16px;
     font-weight: bold;
     color: #0f0;
-    white-space: nowrap;
     background: #1a1a1a;
     padding: 4px 10px;
     border-radius: 4px;

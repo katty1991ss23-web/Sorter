@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Розумний фільтр документів</title>
+    <title>Табличний фільтр документів</title>
     <link rel="stylesheet" href="style.css">
     
     <!-- Бібліотеки для читання PDF, Excel, Word -->
@@ -15,7 +15,7 @@
 <body>
 
     <div class="widget">
-        <div class="title">Фільтрація прайс-листа (PDF, Excel, Word)</div>
+        <div class="title">Фільтрація прайс-листа</div>
         
         <div class="top-panel">
             <input type="file" id="fileInput" accept=".pdf,.xlsx,.xls,.docx">
@@ -26,17 +26,17 @@
             </div>
         </div>
 
-        <!-- Полоска-фільтр -->
-        <input type="text" id="filterInput" class="filter-input" placeholder="Введіть запит (наприклад: штукатурка, стіни)..." disabled>
+        <!-- Чистий фільтр без дурних прикладів -->
+        <input type="text" id="filterInput" class="filter-input" placeholder="Введіть запит..." disabled>
 
-        <!-- Структуроване табло результатів (виведемо таблицею) -->
+        <!-- Структуроване табло результатів (справжня таблиця) -->
         <div id="output" class="output-box">
             <div class="placeholder-text">Завантажте документ і введіть запит для пошуку...</div>
         </div>
     </div>
 
     <script>
-        let fileItems = []; // Масив об'єктів (розділи, роботи, ціни)
+        let priceItems = []; // Масив розібраних рядків прайсу
 
         document.getElementById('fileInput').addEventListener('change', async function(event) {
             const file = event.target.files[0];
@@ -44,7 +44,7 @@
 
             const extension = file.name.split('.').pop().toLowerCase();
             const outputBox = document.getElementById('output');
-            outputBox.innerHTML = '<div class="placeholder-text">Обробка та структурування документа...</div>';
+            outputBox.innerHTML = '<div class="placeholder-text">Аналіз та структурування документа...</div>';
 
             try {
                 let fullText = "";
@@ -61,8 +61,8 @@
                     return;
                 }
 
-                // Перетворюємо сирий текст на структуровані елементи (розділи та рядки цін)
-                fileItems = parseStructuredText(fullText);
+                // Інтелектуально розбираємо документ на структуровані елементи (заголовки + позиції)
+                priceItems = parsePriceTable(fullText);
 
                 document.getElementById('fileName').textContent = file.name;
                 document.getElementById('fileContainer').style.display = 'flex';
@@ -72,7 +72,7 @@
                 filterInput.disabled = false;
                 filterInput.focus();
 
-                outputBox.innerHTML = `<div class="placeholder-text">Документ готовий. Знайдено позицій: ${fileItems.length}. Введіть запит вище.</div>`;
+                outputBox.innerHTML = `<div class="placeholder-text">Документ готовий. Знайдено позицій: ${priceItems.length}. Введіть запит вище.</div>`;
 
             } catch (error) {
                 console.error(error);
@@ -87,8 +87,8 @@
             for (let i = 1; i <= pdf.numPages; i++) {
                 const page = await pdf.getPage(i);
                 const textContent = await page.getTextContent();
-                // Зберігаємо вертикальне положення або просто гарно збираємо рядки
-                const pageText = textContent.items.map(item => item.str).join('   ');
+                // Акуратно збираємо координати або текст по рядках
+                const pageText = textContent.items.map(item => item.str).join(' ');
                 text += pageText + "\n";
             }
             return text;
@@ -111,25 +111,50 @@
             return result.value;
         }
 
-        // Функція інтелектуального розбору прайсу на рядки/заголовки
-        function parseStructuredText(text) {
+        // Жорсткий парсер, який виділяє Назву, Одиницю виміру та Ціну
+        function parsePriceTable(text) {
             const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
             let items = [];
             let currentCategory = "";
 
-            // Регулярки для виділення цін та одиниць виміру у кінці рядка (напр: "м2 400,00" або "пог.м 500")
-            // Шукаємо цифри з комами в кінці рядка
             for (let line of rawLines) {
-                // Перевіряємо, чи це заголовок розділу (наприклад, повністю великими літерами типу "ШТУКАТУРНІ РОБОТИ")
+                // Якщо це заголовок розділу (великими літерами, без цифр)
                 if (line === line.toUpperCase() && line.length > 3 && !/\d/.test(line)) {
                     currentCategory = line;
                     continue;
                 }
 
-                items.push({
-                    category: currentCategory,
-                    rawText: line
-                });
+                // Шукаємо в кінці рядка одиницю виміру та ціну (наприклад: "м² 300" або "пог.м. 100,00" або "% 20,00")
+                // Регулярка чітко відрікремлює ціну і одиницю від назви роботи
+                const match = line.match(/^(.*?)\s+([м²м2%штпог\.]+[\.,]?м?)\s+([\d\s,\.]+)$/i) || 
+                              line.match(/^(.*?)\s+([\d\s,\.]+)$/);
+
+                if (match) {
+                    if (match.length === 4) {
+                        items.push({
+                            category: currentCategory,
+                            name: match[1].trim(),
+                            unit: match[2].trim(),
+                            price: match[3].trim()
+                        });
+                    } else if (match.length === 3) {
+                        // Якщо одиниця виміру була злита в назві
+                        items.push({
+                            category: currentCategory,
+                            name: match[1].trim(),
+                            unit: "",
+                            price: match[2].trim()
+                        });
+                    }
+                } else if (line.length > 5) {
+                    // Якщо рядок не має чіткої ціни в кінці, але це текст
+                    items.push({
+                        category: currentCategory,
+                        name: line,
+                        unit: "",
+                        price: ""
+                    });
+                }
             }
             return items;
         }
@@ -137,7 +162,7 @@
         document.getElementById('removeFile').addEventListener('click', resetWidget);
 
         function resetWidget() {
-            fileItems = [];
+            priceItems = [];
             document.getElementById('fileInput').value = '';
             document.getElementById('fileContainer').style.display = 'none';
             document.getElementById('fileInput').style.display = 'inline-block';
@@ -149,51 +174,39 @@
             document.getElementById('output').innerHTML = '<div class="placeholder-text">Завантажте документ і введіть запит для пошуку...</div>';
         }
 
-        // Пошук і форматування під красиві табличні колонки
+        // Фільтрація та красиве табличне виведення
         document.getElementById('filterInput').addEventListener('input', function(e) {
             const query = e.target.value.trim().toLowerCase();
             const outputBox = document.getElementById('output');
 
-            if (!query || fileItems.length === 0) {
+            if (!query || priceItems.length === 0) {
                 outputBox.innerHTML = '<div class="placeholder-text">Завантажте документ і введіть запит для пошуку...</div>';
                 return;
             }
 
-            // Фільтруємо позиції за запитом
-            const matched = fileItems.filter(item => item.rawText.toLowerCase().includes(query));
+            // Шукаємо співпадіння по назві або категорії
+            const matched = priceItems.filter(item => 
+                item.name.toLowerCase().includes(query) || 
+                item.category.toLowerCase().includes(query)
+            );
 
             if (matched.length > 0) {
                 let htmlContent = '';
                 let lastCat = '';
 
                 matched.forEach(item => {
-                    // Якщо з'явився новий розділ — малюємо його по центру як заголовок
+                    // Якщо з'явився розділ — малюємо його гарним заголовком по центру
                     if (item.category && item.category !== lastCat) {
                         lastCat = item.category;
                         htmlContent += `<div class="section-header">${lastCat}</div>`;
                     }
 
-                    // Розбиваємо рядок на частини (назва, одиниця виміру, ціна), якщо вони є
-                    const parts = item.rawText.split(/\s{2,}|\t+|(?=[м²%]|пог\.м|шт|тука|кв\.м)\b/);
-                    
-                    let namePart = item.rawText;
-                    let unitPricePart = "";
-
-                    // Спроба акуратно відокремити назву від ціни в кінці рядка
-                    const priceMatch = item.rawText.match(/(?:м²|м2|пог\.м|шт|%|\bм\b)\s*([\d\s,]+)$/i);
-                    if (priceMatch) {
-                        const idx = item.rawText.lastIndexOf(priceMatch[0]);
-                        namePart = item.rawText.substring(0, idx).trim();
-                        unitPricePart = priceMatch[0];
-                    }
-
-                    if (!namePart) namePart = item.rawText;
-
-                    // Формуємо гарний рядок у вигляді колонок
+                    // Виводимо повноцінну табличну структуру: Назва | Од. виміру | Ціна
                     htmlContent += `
                         <div class="table-row">
-                            <div class="row-name">${namePart}</div>
-                            <div class="row-price">${unitPricePart}</div>
+                            <div class="col-name">${item.name}</div>
+                            <div class="col-unit">${item.unit}</div>
+                            <div class="col-price">${item.price}</div>
                         </div>
                     `;
                 });

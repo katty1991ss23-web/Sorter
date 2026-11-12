@@ -1,222 +1,751 @@
+
 <!DOCTYPE html>
-<html lang="en">
+<html lang="uk">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Табличний фільтр документів</title>
+    <title>Структурований фільтр документів</title>
+
     <link rel="stylesheet" href="style.css">
-    
-    <!-- Бібліотеки для читання PDF, Excel, Word -->
+
+    <!-- PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+
+    <!-- Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <!-- Word -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 </head>
+
 <body>
 
-    <div class="widget">
-        <div class="title">Фільтрація прайс-листа</div>
-        
-        <div class="top-panel">
-            <input type="file" id="fileInput" accept=".pdf,.xlsx,.xls,.docx">
-            
-            <div id="fileContainer" style="display: none;" class="file-info">
-                <span id="fileName"></span>
-                <button class="remove-btn" id="removeFile" title="Видалити файл">✕</button>
-            </div>
+<div class="widget">
+
+    <div class="title">СТРУКТУРОВАНА ФІЛЬТРАЦІЯ ДОКУМЕНТІВ</div>
+
+    <div class="top-panel">
+
+        <input
+            type="file"
+            id="fileInput"
+            accept=".pdf,.xlsx,.xls,.docx"
+        >
+
+        <div id="fileContainer" class="file-info" style="display:none;">
+            <span id="fileName"></span>
+            <button class="remove-btn" id="removeFile" title="Видалити файл">✕</button>
         </div>
 
-        <!-- Чистий фільтр без дурних прикладів -->
-        <input type="text" id="filterInput" class="filter-input" placeholder="Введіть запит..." disabled>
+    </div>
 
-        <!-- Структуроване табло результатів (справжня таблиця) -->
-        <div id="output" class="output-box">
-            <div class="placeholder-text">Завантажте документ і введіть запит для пошуку...</div>
+    <input
+        type="text"
+        id="filterInput"
+        class="filter-input"
+        placeholder="Введіть запит для пошуку..."
+        disabled
+    >
+
+    <div id="output" class="output-box">
+        <div class="placeholder-text">
+            Завантажте PDF, Excel або Word документ...
         </div>
     </div>
 
-    <script>
-        let priceItems = []; // Масив розібраних рядків прайсу
+</div>
 
-        document.getElementById('fileInput').addEventListener('change', async function(event) {
-            const file = event.target.files[0];
-            if (!file) return;
 
-            const extension = file.name.split('.').pop().toLowerCase();
-            const outputBox = document.getElementById('output');
-            outputBox.innerHTML = '<div class="placeholder-text">Аналіз та структурування документа...</div>';
+<script>
 
-            try {
-                let fullText = "";
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-                if (extension === 'pdf') {
-                    fullText = await readPDF(file);
-                } else if (extension === 'xlsx' || extension === 'xls') {
-                    fullText = await readExcel(file);
-                } else if (extension === 'docx') {
-                    fullText = await readWord(file);
-                } else {
-                    alert('Підтримуються тільки PDF, Excel та Word!');
-                    resetWidget();
-                    return;
-                }
 
-                // Інтелектуально розбираємо документ на структуровані елементи (заголовки + позиції)
-                priceItems = parsePriceTable(fullText);
+let documentBlocks = [];
 
-                document.getElementById('fileName').textContent = file.name;
-                document.getElementById('fileContainer').style.display = 'flex';
-                document.getElementById('fileInput').style.display = 'none';
 
-                const filterInput = document.getElementById('filterInput');
-                filterInput.disabled = false;
-                filterInput.focus();
+/* =====================================================
+   ЗАВАНТАЖЕННЯ ФАЙЛУ
+===================================================== */
 
-                outputBox.innerHTML = `<div class="placeholder-text">Документ готовий. Знайдено позицій: ${priceItems.length}. Введіть запит вище.</div>`;
+document.getElementById("fileInput").addEventListener("change", async function(event) {
 
-            } catch (error) {
-                console.error(error);
-                outputBox.innerHTML = '<div class="placeholder-text" style="color: #ff5252;">Помилка при читанні файлу!</div>';
+    const file = event.target.files[0];
+
+    if (!file) return;
+
+    const extension = file.name.split(".").pop().toLowerCase();
+
+    const output = document.getElementById("output");
+
+    output.innerHTML = `
+        <div class="placeholder-text">
+            Читаємо документ та відновлюємо його структуру...
+        </div>
+    `;
+
+    try {
+
+        let rawBlocks = [];
+
+        if (extension === "pdf") {
+
+            rawBlocks = await readPDF(file);
+
+        } else if (extension === "xlsx" || extension === "xls") {
+
+            rawBlocks = await readExcel(file);
+
+        } else if (extension === "docx") {
+
+            rawBlocks = await readWord(file);
+
+        } else {
+
+            throw new Error("Непідтримуваний формат файлу");
+
+        }
+
+        documentBlocks = structureDocument(rawBlocks);
+
+        document.getElementById("fileName").textContent = file.name;
+
+        document.getElementById("fileContainer").style.display = "flex";
+        document.getElementById("fileInput").style.display = "none";
+
+        const filter = document.getElementById("filterInput");
+
+        filter.disabled = false;
+        filter.focus();
+
+        output.innerHTML = `
+            <div class="placeholder-text">
+                Документ завантажено.<br><br>
+                Структурних блоків: ${documentBlocks.length}.<br>
+                Введіть запит для пошуку.
+            </div>
+        `;
+
+    } catch (error) {
+
+        console.error(error);
+
+        output.innerHTML = `
+            <div class="no-results">
+                Помилка читання документа: ${escapeHTML(error.message)}
+            </div>
+        `;
+
+    }
+
+});
+
+
+/* =====================================================
+   PDF — ВІДНОВЛЕННЯ РЯДКІВ ЗА КООРДИНАТАМИ
+===================================================== */
+
+async function readPDF(file) {
+
+    const buffer = await file.arrayBuffer();
+
+    const pdf = await pdfjsLib.getDocument({
+        data: buffer
+    }).promise;
+
+    const blocks = [];
+
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+
+        const page = await pdf.getPage(pageNumber);
+
+        const content = await page.getTextContent();
+
+        const items = content.items
+            .filter(item => item.str && item.str.trim())
+            .map(item => {
+
+                const transform = item.transform;
+
+                return {
+                    text: item.str,
+                    x: transform[4],
+                    y: transform[5],
+                    height: Math.abs(transform[3]) || 10
+                };
+
+            });
+
+        // Групуємо текст за вертикальними координатами
+
+        const lines = [];
+
+        items.sort((a, b) => {
+
+            if (Math.abs(b.y - a.y) > 3) {
+                return b.y - a.y;
             }
+
+            return a.x - b.x;
+
         });
 
-        async function readPDF(file) {
-            const arrayBuffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            let text = "";
-            for (let i = 1; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
-                const textContent = await page.getTextContent();
-                // Акуратно збираємо координати або текст по рядках
-                const pageText = textContent.items.map(item => item.str).join(' ');
-                text += pageText + "\n";
-            }
-            return text;
-        }
+        items.forEach(item => {
 
-        async function readExcel(file) {
-            const arrayBuffer = await file.arrayBuffer();
-            const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-            let text = "";
-            workbook.SheetNames.forEach(sheetName => {
-                const sheet = workbook.Sheets[sheetName];
-                text += XLSX.utils.sheet_to_csv(sheet) + "\n";
-            });
-            return text;
-        }
-
-        async function readWord(file) {
-            const arrayBuffer = await file.arrayBuffer();
-            const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
-            return result.value;
-        }
-
-        // Жорсткий парсер, який виділяє Назву, Одиницю виміру та Ціну
-        function parsePriceTable(text) {
-            const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-            let items = [];
-            let currentCategory = "";
-
-            for (let line of rawLines) {
-                // Якщо це заголовок розділу (великими літерами, без цифр)
-                if (line === line.toUpperCase() && line.length > 3 && !/\d/.test(line)) {
-                    currentCategory = line;
-                    continue;
-                }
-
-                // Шукаємо в кінці рядка одиницю виміру та ціну (наприклад: "м² 300" або "пог.м. 100,00" або "% 20,00")
-                // Регулярка чітко відрікремлює ціну і одиницю від назви роботи
-                const match = line.match(/^(.*?)\s+([м²м2%штпог\.]+[\.,]?м?)\s+([\d\s,\.]+)$/i) || 
-                              line.match(/^(.*?)\s+([\d\s,\.]+)$/);
-
-                if (match) {
-                    if (match.length === 4) {
-                        items.push({
-                            category: currentCategory,
-                            name: match[1].trim(),
-                            unit: match[2].trim(),
-                            price: match[3].trim()
-                        });
-                    } else if (match.length === 3) {
-                        // Якщо одиниця виміру була злита в назві
-                        items.push({
-                            category: currentCategory,
-                            name: match[1].trim(),
-                            unit: "",
-                            price: match[2].trim()
-                        });
-                    }
-                } else if (line.length > 5) {
-                    // Якщо рядок не має чіткої ціни в кінці, але це текст
-                    items.push({
-                        category: currentCategory,
-                        name: line,
-                        unit: "",
-                        price: ""
-                    });
-                }
-            }
-            return items;
-        }
-
-        document.getElementById('removeFile').addEventListener('click', resetWidget);
-
-        function resetWidget() {
-            priceItems = [];
-            document.getElementById('fileInput').value = '';
-            document.getElementById('fileContainer').style.display = 'none';
-            document.getElementById('fileInput').style.display = 'inline-block';
-            
-            const filterInput = document.getElementById('filterInput');
-            filterInput.value = '';
-            filterInput.disabled = true;
-
-            document.getElementById('output').innerHTML = '<div class="placeholder-text">Завантажте документ і введіть запит для пошуку...</div>';
-        }
-
-        // Фільтрація та красиве табличне виведення
-        document.getElementById('filterInput').addEventListener('input', function(e) {
-            const query = e.target.value.trim().toLowerCase();
-            const outputBox = document.getElementById('output');
-
-            if (!query || priceItems.length === 0) {
-                outputBox.innerHTML = '<div class="placeholder-text">Завантажте документ і введіть запит для пошуку...</div>';
-                return;
-            }
-
-            // Шукаємо співпадіння по назві або категорії
-            const matched = priceItems.filter(item => 
-                item.name.toLowerCase().includes(query) || 
-                item.category.toLowerCase().includes(query)
+            let line = lines.find(existing =>
+                Math.abs(existing.y - item.y) <= 3
             );
 
-            if (matched.length > 0) {
-                let htmlContent = '';
-                let lastCat = '';
+            if (!line) {
 
-                matched.forEach(item => {
-                    // Якщо з'явився розділ — малюємо його гарним заголовком по центру
-                    if (item.category && item.category !== lastCat) {
-                        lastCat = item.category;
-                        htmlContent += `<div class="section-header">${lastCat}</div>`;
-                    }
+                line = {
+                    y: item.y,
+                    items: []
+                };
 
-                    // Виводимо повноцінну табличну структуру: Назва | Од. виміру | Ціна
-                    htmlContent += `
-                        <div class="table-row">
-                            <div class="col-name">${item.name}</div>
-                            <div class="col-unit">${item.unit}</div>
-                            <div class="col-price">${item.price}</div>
-                        </div>
-                    `;
+                lines.push(line);
+
+            }
+
+            line.items.push(item);
+
+        });
+
+        lines.sort((a, b) => b.y - a.y);
+
+        lines.forEach(line => {
+
+            line.items.sort((a, b) => a.x - b.x);
+
+            const text = line.items
+                .map(item => item.text)
+                .join(" ")
+                .replace(/\s+/g, " ")
+                .trim();
+
+            if (text) {
+
+                blocks.push({
+                    type: "text",
+                    text: text,
+                    page: pageNumber
                 });
 
-                outputBox.innerHTML = htmlContent;
-            } else {
-                outputBox.innerHTML = '<div class="placeholder-text" style="color: #ff5252;">Нічого не знайдено за цим запитом...</div>';
             }
+
         });
-    </script>
+
+    }
+
+    return blocks;
+
+}
+
+
+/* =====================================================
+   EXCEL — ЗБЕРЕЖЕННЯ РЯДКІВ І КОЛОНОК
+===================================================== */
+
+async function readExcel(file) {
+
+    const buffer = await file.arrayBuffer();
+
+    const workbook = XLSX.read(buffer, {
+        type: "array"
+    });
+
+    const blocks = [];
+
+    workbook.SheetNames.forEach(sheetName => {
+
+        blocks.push({
+            type: "heading",
+            text: sheetName
+        });
+
+        const sheet = workbook.Sheets[sheetName];
+
+        const rows = XLSX.utils.sheet_to_json(sheet, {
+            header: 1,
+            defval: "",
+            raw: false
+        });
+
+        rows.forEach(row => {
+
+            const cells = row.map(value =>
+                String(value).trim()
+            );
+
+            if (cells.some(value => value !== "")) {
+
+                blocks.push({
+                    type: "row",
+                    cells: cells
+                });
+
+            }
+
+        });
+
+    });
+
+    return blocks;
+
+}
+
+
+/* =====================================================
+   WORD — ЗБЕРЕЖЕННЯ АБЗАЦІВ
+===================================================== */
+
+async function readWord(file) {
+
+    const buffer = await file.arrayBuffer();
+
+    const result = await mammoth.extractRawText({
+        arrayBuffer: buffer
+    });
+
+    return result.value
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(line => line.length > 0)
+        .map(line => ({
+            type: "text",
+            text: line
+        }));
+
+}
+
+
+/* =====================================================
+   СТРУКТУРУВАННЯ ДОКУМЕНТА
+===================================================== */
+
+function structureDocument(rawBlocks) {
+
+    const result = [];
+
+    let currentCategory = "";
+
+    rawBlocks.forEach(block => {
+
+        if (block.type === "heading") {
+
+            currentCategory = block.text;
+
+            result.push({
+                type: "heading",
+                text: block.text
+            });
+
+            return;
+
+        }
+
+        if (block.type === "row") {
+
+            const cells = block.cells.filter(cell => cell !== "");
+
+            if (cells.length === 0) return;
+
+            // Excel: рядок таблиці залишається таблицею
+
+            result.push({
+                type: "row",
+                category: currentCategory,
+                cells: cells
+            });
+
+            return;
+
+        }
+
+        const line = block.text
+            .replace(/\s+/g, " ")
+            .trim();
+
+        if (!line) return;
+
+        // Розпізнавання заголовків
+
+        if (isHeading(line)) {
+
+            currentCategory = line;
+
+            result.push({
+                type: "heading",
+                text: line
+            });
+
+            return;
+
+        }
+
+        // Розпізнавання рядків прайсу
+
+        const price = parsePriceLine(line);
+
+        if (price) {
+
+            result.push({
+                type: "price",
+                category: currentCategory,
+                name: price.name,
+                unit: price.unit,
+                price: price.price
+            });
+
+            return;
+
+        }
+
+        // Усе інше залишається звичайним текстом
+
+        result.push({
+            type: "text",
+            category: currentCategory,
+            text: line
+        });
+
+    });
+
+    return result;
+
+}
+
+
+/* =====================================================
+   РОЗПІЗНАВАННЯ ЗАГОЛОВКІВ
+===================================================== */
+
+function isHeading(line) {
+
+    if (line.length < 3 || line.length > 120) {
+        return false;
+    }
+
+    // Рядки без цифр, написані великими літерами
+
+    const letters = line.replace(/[^А-ЯІЇЄҐA-Z]/g, "");
+
+    if (
+        letters.length >= 3 &&
+        letters === letters.toUpperCase() &&
+        line === line.toUpperCase()
+    ) {
+        return true;
+    }
+
+    // Типові назви розділів
+
+    if (/^(розділ|частина|глава|section|chapter)\s+[\dIVXА-Я]/i.test(line)) {
+        return true;
+    }
+
+    // Нумеровані заголовки на кшталт 1. Загальні роботи
+
+    if (/^\d+(\.\d+)*\.?\s+[А-ЯІЇЄҐA-Z]/.test(line) && line.length < 100) {
+        return true;
+    }
+
+    return false;
+
+}
+
+
+/* =====================================================
+   РОЗПІЗНАВАННЯ ЦІНИ ТА ОДИНИЦІ ВИМІРУ
+===================================================== */
+
+function parsePriceLine(line) {
+
+    const match = line.match(
+        /^(.+?)\s+(м²|м2|м\.кв\.|м\.п\.|пог\.?\s*м\.?|шт\.?|компл\.?|кг|т|л|год\.?|люд\.?\s*год\.?|%|од\.?)\s+([\d\s]+(?:[.,]\d{1,2})?)\s*(грн\.?|₴)?$/i
+    );
+
+    if (match) {
+
+        return {
+            name: match[1].trim(),
+            unit: match[2].trim(),
+            price: (match[3] + (match[4] ? " " + match[4] : "")).trim()
+        };
+
+    }
+
+    // Резервний варіант: назва + ціна
+
+    const simpleMatch = line.match(
+        /^(.+?)\s+([\d][\d\s]*(?:[.,]\d{1,2})?)\s*(грн\.?|₴)$/i
+    );
+
+    if (simpleMatch) {
+
+        return {
+            name: simpleMatch[1].trim(),
+            unit: "",
+            price: (simpleMatch[2] + " " + simpleMatch[3]).trim()
+        };
+
+    }
+
+    return null;
+
+}
+
+
+/* =====================================================
+   ПОШУК
+===================================================== */
+
+document.getElementById("filterInput").addEventListener("input", function(event) {
+
+    const query = event.target.value.trim().toLowerCase();
+
+    const output = document.getElementById("output");
+
+    if (!query) {
+
+        output.innerHTML = `
+            <div class="placeholder-text">
+                Введіть запит для пошуку в документі...
+            </div>
+        `;
+
+        return;
+
+    }
+
+    const matchedIndexes = new Set();
+
+    // Знаходимо всі відповідні блоки
+
+    documentBlocks.forEach((block, index) => {
+
+        const searchableText = getBlockText(block).toLowerCase();
+
+        if (searchableText.includes(query)) {
+
+            matchedIndexes.add(index);
+
+        }
+
+    });
+
+    if (matchedIndexes.size === 0) {
+
+        output.innerHTML = `
+            <div class="no-results">
+                Нічого не знайдено за запитом «${escapeHTML(query)}»
+            </div>
+        `;
+
+        return;
+
+    }
+
+    // Додаємо заголовок розділу до знайденого фрагмента
+
+    const indexesToShow = new Set();
+
+    matchedIndexes.forEach(index => {
+
+        indexesToShow.add(index);
+
+        for (let i = index - 1; i >= 0; i--) {
+
+            if (documentBlocks[i].type === "heading") {
+
+                indexesToShow.add(i);
+
+                break;
+
+            }
+
+        }
+
+    });
+
+    const sortedIndexes = [...indexesToShow].sort((a, b) => a - b);
+
+    let html = `
+        <div class="result-count">
+            Знайдено відповідних блоків: ${matchedIndexes.size}
+        </div>
+    `;
+
+    sortedIndexes.forEach(index => {
+
+        const block = documentBlocks[index];
+
+        html += renderBlock(block, query);
+
+    });
+
+    output.innerHTML = html;
+
+});
+
+
+/* =====================================================
+   ТЕКСТ ДЛЯ ПОШУКУ
+===================================================== */
+
+function getBlockText(block) {
+
+    if (block.type === "heading") {
+        return block.text;
+    }
+
+    if (block.type === "price") {
+        return `${block.name} ${block.unit} ${block.price} ${block.category || ""}`;
+    }
+
+    if (block.type === "row") {
+        return block.cells.join(" ");
+    }
+
+    return `${block.text || ""} ${block.category || ""}`;
+
+}
+
+
+/* =====================================================
+   ВІДОБРАЖЕННЯ БЛОКІВ
+===================================================== */
+
+function renderBlock(block, query) {
+
+    if (block.type === "heading") {
+
+        return `
+            <div class="section-header">
+                ${highlight(block.text, query)}
+            </div>
+        `;
+
+    }
+
+    if (block.type === "price") {
+
+        return `
+            <div class="table-row">
+
+                <div class="col-name">
+                    ${highlight(block.name, query)}
+                </div>
+
+                <div class="col-unit">
+                    ${highlight(block.unit, query)}
+                </div>
+
+                <div class="col-price">
+                    ${highlight(block.price, query)}
+                </div>
+
+            </div>
+        `;
+
+    }
+
+    if (block.type === "row") {
+
+        const count = Math.max(block.cells.length, 1);
+
+        const cells = block.cells.map(cell => `
+            <div class="document-cell">
+                ${highlight(cell, query)}
+            </div>
+        `).join("");
+
+        return `
+            <div class="document-row" style="--columns:${count}">
+                ${cells}
+            </div>
+        `;
+
+    }
+
+    return `
+        <div class="document-paragraph">
+            ${highlight(block.text, query)}
+        </div>
+    `;
+
+}
+
+
+/* =====================================================
+   БЕЗПЕЧНЕ ПІДСВІЧУВАННЯ ПОШУКУ
+===================================================== */
+
+function escapeHTML(value) {
+
+    return String(value).replace(/[&<>"']/g, char => {
+
+        const entities = {
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#039;"
+        };
+
+        return entities[char];
+
+    });
+
+}
+
+
+function highlight(text, query) {
+
+    const safeText = escapeHTML(text);
+
+    if (!query) return safeText;
+
+    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const regex = new RegExp(`(${escapedQuery})`, "gi");
+
+    return safeText.replace(regex, "<mark>$1</mark>");
+
+}
+
+
+/* =====================================================
+   ВИДАЛЕННЯ ФАЙЛУ ТА СКИДАННЯ
+===================================================== */
+
+document.getElementById("removeFile").addEventListener("click", resetWidget);
+
+
+function resetWidget() {
+
+    documentBlocks = [];
+
+    document.getElementById("fileInput").value = "";
+    document.getElementById("fileInput").style.display = "inline-block";
+
+    document.getElementById("fileContainer").style.display = "none";
+
+    const filter = document.getElementById("filterInput");
+
+    filter.value = "";
+    filter.disabled = true;
+
+    document.getElementById("output").innerHTML = `
+        <div class="placeholder-text">
+            Завантажте PDF, Excel або Word документ...
+        </div>
+    `;
+
+}
+
+</script>
 
 </body>
 </html>

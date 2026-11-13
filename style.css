@@ -22,8 +22,8 @@ body {
 }
 
 .widget {
-    width: min(950px, 100%);
-    height: min(760px, calc(100vh - 40px));
+    width: min(1190px, 100%);
+    height: min(840px, calc(100vh - 40px));
     min-height: 400px;
     background: #2d2d2d;
     border: 1px solid #444;
@@ -41,46 +41,106 @@ body {
     color: #aaa;
 }
 
+/* Верхня панель */
+
 .top-panel {
     display: flex;
     align-items: center;
     gap: 12px;
-    flex-wrap: wrap;
+    width: 100%;
+    min-width: 0;
 }
 
 input[type="file"] {
-    max-width: 100%;
+    flex: 0 0 260px;
+    min-width: 180px;
+    max-width: 260px;
     font-size: 13px;
     color: #fff;
 }
 
-.file-info {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 14px;
-    color: #81c784;
-    background: #1e1e1e;
-    padding: 7px 12px;
-    border: 1px solid #444;
-    border-radius: 4px;
-    max-width: 100%;
-    overflow-wrap: anywhere;
+/* Контейнер вкладок */
+
+.file-tabs {
+    display: grid;
+    grid-template-columns: repeat(var(--tab-count, 1), minmax(0, 1fr));
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
 }
 
-.remove-btn {
-    background: none;
+/* Окреме віконце документа */
+
+.file-tab-wrap {
+    display: flex;
+    align-items: stretch;
+    min-width: 0;
+    height: 38px;
+    background: #1e1e1e;
+    border: 2px solid #444;
+    border-radius: 4px;
+    overflow: hidden;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.file-tab-wrap:hover {
+    border-color: #777;
+}
+
+.file-tab-wrap.active {
+    border: 2px solid #4caf50;
+    background: #263326;
+    box-shadow: 0 0 0 1px rgba(76, 175, 80, 0.2);
+}
+
+.file-tab {
+    flex: 1;
+    min-width: 0;
     border: none;
+    background: transparent;
+    color: #aaa;
+    cursor: pointer;
+    padding: 0 10px;
+    text-align: left;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-tab-wrap.active .file-tab {
+    color: #a5d6a7;
+    font-weight: bold;
+}
+
+.file-tab:hover {
+    color: #fff;
+}
+
+.file-tab-name {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-tab-remove {
+    flex: 0 0 30px;
+    border: none;
+    border-left: 1px solid #444;
+    background: transparent;
     color: #ff5252;
     cursor: pointer;
-    font-weight: bold;
     font-size: 16px;
-    padding: 0 4px;
+    font-weight: bold;
 }
 
-.remove-btn:hover {
+.file-tab-remove:hover {
+    background: #492626;
     color: #ff1744;
 }
+
+/* Поле пошуку */
 
 .filter-input {
     width: 100%;
@@ -97,6 +157,12 @@ input[type="file"] {
     border-color: #81c784;
     box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.15);
 }
+
+.filter-input:disabled {
+    opacity: 0.6;
+}
+
+/* Область документа */
 
 .output-box {
     width: 100%;
@@ -196,7 +262,7 @@ input[type="file"] {
     overflow-wrap: anywhere;
 }
 
-/* Рядки таблиць, які не є прайсом */
+/* Рядки таблиць */
 
 .document-row {
     display: grid;
@@ -224,7 +290,7 @@ input[type="file"] {
     font-weight: bold;
 }
 
-/* Підсвічування знайденого тексту */
+/* Підсвічування пошуку */
 
 mark {
     background: #66551b;
@@ -250,7 +316,7 @@ mark {
 
 /* Мобільна адаптація */
 
-@media (max-width: 600px) {
+@media (max-width: 700px) {
     body {
         padding: 8px;
     }
@@ -259,6 +325,36 @@ mark {
         height: calc(100vh - 16px);
         padding: 12px;
         gap: 10px;
+    }
+
+    .top-panel {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    input[type="file"] {
+        flex: none;
+        max-width: 100%;
+        width: 100%;
+    }
+
+    .file-tabs {
+        width: 100%;
+        grid-template-columns: repeat(var(--tab-count, 1), minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .file-tab-wrap {
+        height: 36px;
+    }
+
+    .file-tab {
+        padding: 0 6px;
+        font-size: 11px;
+    }
+
+    .file-tab-remove {
+        flex-basis: 25px;
     }
 
     .output-box {

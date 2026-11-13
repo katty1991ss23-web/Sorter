@@ -1,9 +1,11 @@
 
 <!DOCTYPE html>
 <html lang="uk">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>Структурований фільтр документів</title>
 
     <link rel="stylesheet" href="style.css">
@@ -21,12 +23,14 @@
 
     <div class="top-panel">
 
-        <input type="file" id="fileInput" accept=".pdf,.xlsx,.xls,.docx">
+        <input
+            type="file"
+            id="fileInput"
+            accept=".pdf,.xlsx,.xls,.docx"
+            multiple
+        >
 
-        <div id="fileContainer" class="file-info" style="display:none;">
-            <span id="fileName"></span>
-            <button class="remove-btn" id="removeFile" title="Видалити файл">✕</button>
-        </div>
+        <div id="fileTabs" class="file-tabs"></div>
 
     </div>
 
@@ -39,9 +43,11 @@
     >
 
     <div id="output" class="output-box">
+
         <div class="placeholder-text">
             Завантажте PDF, Excel або Word документ...
         </div>
+
     </div>
 
 </div>
@@ -54,73 +60,270 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 
 let documentBlocks = [];
 
+let documents = [];
+let activeDocumentIndex = -1;
+
 
 /* =====================================================
-   ЗАВАНТАЖЕННЯ ФАЙЛУ
+   ЗАВАНТАЖЕННЯ ДОКУМЕНТІВ
 ===================================================== */
 
-document.getElementById("fileInput").addEventListener("change", async function(event) {
+const fileInput = document.getElementById("fileInput");
 
-    const file = event.target.files[0];
+fileInput.addEventListener("change", async function(event) {
 
-    if (!file) return;
+    const selectedFiles = Array.from(event.target.files);
 
-    const extension = file.name.split(".").pop().toLowerCase();
+    if (!selectedFiles.length) return;
+
+    const availableSlots = 3 - documents.length;
+
+    if (availableSlots <= 0) {
+
+        alert("Можна завантажити максимум 3 документи.");
+
+        fileInput.value = "";
+        return;
+
+    }
+
+    const filesToLoad = selectedFiles.slice(0, availableSlots);
+
+    if (selectedFiles.length > availableSlots) {
+
+        alert("Можна додати ще тільки " + availableSlots + " документ(и).");
+
+    }
+
     const output = document.getElementById("output");
 
-    output.innerHTML = `
-        <div class="placeholder-text">
-            Читаємо документ та відновлюємо його структуру...
-        </div>
-    `;
+    for (const file of filesToLoad) {
 
-    try {
+        output.innerHTML = `
+            <div class="placeholder-text">
+                Читаємо документ: ${escapeHTML(file.name)}...
+            </div>
+        `;
 
-        let rawBlocks = [];
+        try {
 
-        if (extension === "pdf") {
-            rawBlocks = await readPDF(file);
+            const extension = file.name.split(".").pop().toLowerCase();
+
+            let rawBlocks = [];
+
+            if (extension === "pdf") {
+
+                rawBlocks = await readPDF(file);
+
+            }
+            else if (extension === "xlsx" || extension === "xls") {
+
+                rawBlocks = await readExcel(file);
+
+            }
+            else if (extension === "docx") {
+
+                rawBlocks = await readWord(file);
+
+            }
+            else {
+
+                throw new Error("Непідтримуваний формат файлу");
+
+            }
+
+            const structuredBlocks = structureDocument(rawBlocks);
+
+            documents.push({
+
+                id: Date.now() + Math.random(),
+
+                name: file.name,
+
+                blocks: structuredBlocks
+
+            });
+
+            activeDocumentIndex = documents.length - 1;
+
+            documentBlocks = structuredBlocks;
+
+            renderFileTabs();
+
+            const filter = document.getElementById("filterInput");
+
+            filter.disabled = false;
+            filter.value = "";
+
+            renderFullDocument();
+
         }
-        else if (extension === "xlsx" || extension === "xls") {
-            rawBlocks = await readExcel(file);
+        catch (error) {
+
+            console.error(error);
+
+            output.innerHTML = `
+                <div class="no-results">
+                    Помилка читання документа:
+                    ${escapeHTML(error.message)}
+                </div>
+            `;
+
         }
-        else if (extension === "docx") {
-            rawBlocks = await readWord(file);
+
+    }
+
+    fileInput.value = "";
+
+});
+
+
+/* =====================================================
+   ВКЛАДКИ ДОКУМЕНТІВ
+===================================================== */
+
+function renderFileTabs() {
+
+    const container = document.getElementById("fileTabs");
+
+    container.innerHTML = "";
+
+    container.style.setProperty(
+        "--tab-count",
+        Math.max(documents.length, 1)
+    );
+
+    documents.forEach((doc, index) => {
+
+        const wrapper = document.createElement("div");
+
+        wrapper.className = "file-tab-wrap";
+
+        if (index === activeDocumentIndex) {
+
+            wrapper.classList.add("active");
+
         }
-        else {
-            throw new Error("Непідтримуваний формат файлу");
-        }
 
-        documentBlocks = structureDocument(rawBlocks);
+        const tab = document.createElement("button");
 
-        document.getElementById("fileName").textContent = file.name;
+        tab.type = "button";
+        tab.className = "file-tab";
+        tab.title = doc.name;
 
-        document.getElementById("fileContainer").style.display = "flex";
-        document.getElementById("fileInput").style.display = "none";
+        tab.innerHTML = `
+            <span class="file-tab-name">
+                ${escapeHTML(doc.name)}
+            </span>
+        `;
 
-        const filter = document.getElementById("filterInput");
+        tab.addEventListener("click", function() {
 
-        filter.disabled = false;
-        filter.value = "";
+            switchDocument(index);
 
-        // ОДРАЗУ ПОКАЗУЄМО ВЕСЬ ДОКУМЕНТ
+        });
+
+        const removeButton = document.createElement("button");
+
+        removeButton.type = "button";
+        removeButton.className = "file-tab-remove";
+        removeButton.textContent = "✕";
+        removeButton.title = "Видалити документ";
+
+        removeButton.addEventListener("click", function(event) {
+
+            event.stopPropagation();
+
+            removeDocument(index);
+
+        });
+
+        wrapper.appendChild(tab);
+        wrapper.appendChild(removeButton);
+
+        container.appendChild(wrapper);
+
+    });
+
+}
+
+
+/* =====================================================
+   ПЕРЕМИКАННЯ МІЖ ДОКУМЕНТАМИ
+===================================================== */
+
+function switchDocument(index) {
+
+    if (index < 0 || index >= documents.length) return;
+
+    activeDocumentIndex = index;
+
+    documentBlocks = documents[index].blocks;
+
+    renderFileTabs();
+
+    const filter = document.getElementById("filterInput");
+
+    if (filter.value.trim()) {
+
+        performSearch(filter.value);
+
+    }
+    else {
 
         renderFullDocument();
 
     }
-    catch (error) {
 
-        console.error(error);
+}
 
-        output.innerHTML = `
-            <div class="no-results">
-                Помилка читання документа: ${escapeHTML(error.message)}
-            </div>
-        `;
+
+/* =====================================================
+   ВИДАЛЕННЯ ОКРЕМОГО ДОКУМЕНТА
+===================================================== */
+
+function removeDocument(index) {
+
+    if (index < 0 || index >= documents.length) return;
+
+    documents.splice(index, 1);
+
+    if (documents.length === 0) {
+
+        resetWidget();
+        return;
 
     }
 
-});
+    if (index === activeDocumentIndex) {
+
+        activeDocumentIndex = Math.min(index, documents.length - 1);
+
+    }
+    else if (index < activeDocumentIndex) {
+
+        activeDocumentIndex--;
+
+    }
+
+    documentBlocks = documents[activeDocumentIndex].blocks;
+
+    renderFileTabs();
+
+    const filter = document.getElementById("filterInput");
+
+    if (filter.value.trim()) {
+
+        performSearch(filter.value);
+
+    }
+    else {
+
+        renderFullDocument();
+
+    }
+
+}
 
 
 /* =====================================================
@@ -132,7 +335,9 @@ async function readPDF(file) {
     const buffer = await file.arrayBuffer();
 
     const pdf = await pdfjsLib.getDocument({
+
         data: buffer
+
     }).promise;
 
     const blocks = [];
@@ -140,19 +345,27 @@ async function readPDF(file) {
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
 
         const page = await pdf.getPage(pageNumber);
+
         const content = await page.getTextContent();
 
         const items = content.items
+
             .filter(item => item.str && item.str.trim())
+
             .map(item => {
 
                 const transform = item.transform;
 
                 return {
+
                     text: item.str,
+
                     x: transform[4],
+
                     y: transform[5],
+
                     height: Math.abs(transform[3]) || 10
+
                 };
 
             });
@@ -162,7 +375,9 @@ async function readPDF(file) {
         items.sort((a, b) => {
 
             if (Math.abs(b.y - a.y) > 3) {
+
                 return b.y - a.y;
+
             }
 
             return a.x - b.x;
@@ -172,14 +387,19 @@ async function readPDF(file) {
         items.forEach(item => {
 
             let line = lines.find(existing =>
+
                 Math.abs(existing.y - item.y) <= 3
+
             );
 
             if (!line) {
 
                 line = {
+
                     y: item.y,
+
                     items: []
+
                 };
 
                 lines.push(line);
@@ -197,17 +417,25 @@ async function readPDF(file) {
             line.items.sort((a, b) => a.x - b.x);
 
             const text = line.items
+
                 .map(item => item.text)
+
                 .join(" ")
+
                 .replace(/\s+/g, " ")
+
                 .trim();
 
             if (text) {
 
                 blocks.push({
+
                     type: "text",
+
                     text: text,
+
                     page: pageNumber
+
                 });
 
             }
@@ -230,7 +458,9 @@ async function readExcel(file) {
     const buffer = await file.arrayBuffer();
 
     const workbook = XLSX.read(buffer, {
+
         type: "array"
+
     });
 
     const blocks = [];
@@ -238,29 +468,41 @@ async function readExcel(file) {
     workbook.SheetNames.forEach(sheetName => {
 
         blocks.push({
+
             type: "heading",
+
             text: sheetName
+
         });
 
         const sheet = workbook.Sheets[sheetName];
 
         const rows = XLSX.utils.sheet_to_json(sheet, {
+
             header: 1,
+
             defval: "",
+
             raw: false
+
         });
 
         rows.forEach(row => {
 
             const cells = row.map(value =>
+
                 String(value).trim()
+
             );
 
             if (cells.some(value => value !== "")) {
 
                 blocks.push({
+
                     type: "row",
+
                     cells: cells
+
                 });
 
             }
@@ -283,16 +525,25 @@ async function readWord(file) {
     const buffer = await file.arrayBuffer();
 
     const result = await mammoth.extractRawText({
+
         arrayBuffer: buffer
+
     });
 
     return result.value
+
         .split(/\r?\n/)
+
         .map(line => line.trim())
+
         .filter(line => line.length > 0)
+
         .map(line => ({
+
             type: "text",
+
             text: line
+
         }));
 
 }
@@ -315,8 +566,11 @@ function structureDocument(rawBlocks) {
             currentCategory = block.text;
 
             result.push({
+
                 type: "heading",
+
                 text: block.text
+
             });
 
             return;
@@ -330,9 +584,13 @@ function structureDocument(rawBlocks) {
             if (cells.length === 0) return;
 
             result.push({
+
                 type: "row",
+
                 category: currentCategory,
+
                 cells: cells
+
             });
 
             return;
@@ -340,7 +598,9 @@ function structureDocument(rawBlocks) {
         }
 
         const line = block.text
+
             .replace(/\s+/g, " ")
+
             .trim();
 
         if (!line) return;
@@ -350,8 +610,11 @@ function structureDocument(rawBlocks) {
             currentCategory = line;
 
             result.push({
+
                 type: "heading",
+
                 text: line
+
             });
 
             return;
@@ -363,11 +626,17 @@ function structureDocument(rawBlocks) {
         if (price) {
 
             result.push({
+
                 type: "price",
+
                 category: currentCategory,
+
                 name: price.name,
+
                 unit: price.unit,
+
                 price: price.price
+
             });
 
             return;
@@ -375,9 +644,13 @@ function structureDocument(rawBlocks) {
         }
 
         result.push({
+
             type: "text",
+
             category: currentCategory,
+
             text: line
+
         });
 
     });
@@ -394,25 +667,37 @@ function structureDocument(rawBlocks) {
 function isHeading(line) {
 
     if (line.length < 3 || line.length > 120) {
+
         return false;
+
     }
 
     const letters = line.replace(/[^А-ЯІЇЄҐA-Z]/g, "");
 
     if (
+
         letters.length >= 3 &&
+
         letters === letters.toUpperCase() &&
+
         line === line.toUpperCase()
+
     ) {
+
         return true;
+
     }
 
     if (/^(розділ|частина|глава|section|chapter)\s+[\dIVXА-Я]/i.test(line)) {
+
         return true;
+
     }
 
     if (/^\d+(\.\d+)*\.?\s+[А-ЯІЇЄҐA-Z]/.test(line) && line.length < 100) {
+
         return true;
+
     }
 
     return false;
@@ -427,29 +712,41 @@ function isHeading(line) {
 function parsePriceLine(line) {
 
     const match = line.match(
+
         /^(.+?)\s+(м²|м2|м\.кв\.|м\.п\.|пог\.?\s*м\.?|шт\.?|компл\.?|кг|т|л|год\.?|люд\.?\s*год\.?|%|од\.?)\s+([\d\s]+(?:[.,]\d{1,2})?)\s*(грн\.?|₴)?$/i
+
     );
 
     if (match) {
 
         return {
+
             name: match[1].trim(),
+
             unit: match[2].trim(),
+
             price: (match[3] + (match[4] ? " " + match[4] : "")).trim()
+
         };
 
     }
 
     const simpleMatch = line.match(
+
         /^(.+?)\s+([\d][\d\s]*(?:[.,]\d{1,2})?)\s*(грн\.?|₴)$/i
+
     );
 
     if (simpleMatch) {
 
         return {
+
             name: simpleMatch[1].trim(),
+
             unit: "",
+
             price: (simpleMatch[2] + " " + simpleMatch[3]).trim()
+
         };
 
     }
@@ -502,11 +799,16 @@ function renderFullDocument() {
 
 document.getElementById("filterInput").addEventListener("input", function(event) {
 
-    const query = event.target.value.trim().toLowerCase();
+    performSearch(event.target.value);
+
+});
+
+
+function performSearch(searchValue) {
+
+    const query = searchValue.trim().toLowerCase();
 
     const output = document.getElementById("output");
-
-    // Порожній пошук — повертаємо весь документ
 
     if (!query) {
 
@@ -541,8 +843,6 @@ document.getElementById("filterInput").addEventListener("input", function(event)
         return;
 
     }
-
-    // Підтягуємо заголовок відповідного розділу
 
     const indexesToShow = new Set();
 
@@ -580,7 +880,7 @@ document.getElementById("filterInput").addEventListener("input", function(event)
 
     output.innerHTML = html;
 
-});
+}
 
 
 /* =====================================================
@@ -590,15 +890,21 @@ document.getElementById("filterInput").addEventListener("input", function(event)
 function getBlockText(block) {
 
     if (block.type === "heading") {
+
         return block.text;
+
     }
 
     if (block.type === "price") {
+
         return `${block.name} ${block.unit} ${block.price} ${block.category || ""}`;
+
     }
 
     if (block.type === "row") {
+
         return block.cells.join(" ");
+
     }
 
     return `${block.text || ""} ${block.category || ""}`;
@@ -649,9 +955,11 @@ function renderBlock(block, query) {
         const count = Math.max(block.cells.length, 1);
 
         const cells = block.cells.map(cell => `
+
             <div class="document-cell">
                 ${highlight(cell, query)}
             </div>
+
         `).join("");
 
         return `
@@ -680,11 +988,17 @@ function escapeHTML(value) {
     return String(value).replace(/[&<>"']/g, char => {
 
         const entities = {
+
             "&": "&amp;",
+
             "<": "&lt;",
+
             ">": "&gt;",
+
             '"': "&quot;",
+
             "'": "&#039;"
+
         };
 
         return entities[char];
@@ -710,30 +1024,33 @@ function highlight(text, query) {
 
 
 /* =====================================================
-   ВИДАЛЕННЯ ФАЙЛУ
+   ПОВНЕ СКИДАННЯ ВІДЖЕТА
 ===================================================== */
-
-document.getElementById("removeFile").addEventListener("click", resetWidget);
-
 
 function resetWidget() {
 
+    documents = [];
+
     documentBlocks = [];
 
-    document.getElementById("fileInput").value = "";
-    document.getElementById("fileInput").style.display = "inline-block";
+    activeDocumentIndex = -1;
 
-    document.getElementById("fileContainer").style.display = "none";
+    document.getElementById("fileInput").value = "";
+
+    document.getElementById("fileTabs").innerHTML = "";
 
     const filter = document.getElementById("filterInput");
 
     filter.value = "";
+
     filter.disabled = true;
 
     document.getElementById("output").innerHTML = `
+
         <div class="placeholder-text">
             Завантажте PDF, Excel або Word документ...
         </div>
+
     `;
 
 }
